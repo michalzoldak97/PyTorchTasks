@@ -16,6 +16,8 @@ import time
 
 print(torch.__version__)
 
+
+
 from math import tanh, exp
 def tanhexp(x):
     return x * torch.tanh(torch.exp(x))

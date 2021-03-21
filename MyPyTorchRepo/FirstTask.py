@@ -120,11 +120,19 @@ import numpy as np
 # xcat = torch.cat((x1,x2), dim=0) #concatenate
 # xcat_1 = torch.cat((x1,x2), dim=1)
 # unroll = x1.view(-1)
+#
+#
+# import pandas as pd
+# df = pd.DataFrame([0], columns=['R'])
+# print(df)
+from PIL import Image, ImageDraw
 
-x1 = torch.rand((8,3,2))
-x2 = x1.view(8,-1)
-x3 = x1.view(4,-1)
-premute = x1.permute(0,2,1)
-unsquezze = x1.unsqueeze(dim=1)
-
-print("Test matrix 1: {} \n Test matrix shape: {} \n features {} \n {}".format(x1, x2, x3, unsquezze))
+test_img = torch.rand((28, 28))
+test_img = test_img.cpu().numpy() * 255
+test_img = Image.fromarray(test_img)
+test_img = test_img.resize((280, 280), Image.LANCZOS)
+test_img = test_img.convert("RGB")
+test_draw = ImageDraw.Draw(test_img)
+test_draw.text((10, 10), str(10),  fill="#31FF2D")
+test_img.show()
+print(test_img)
