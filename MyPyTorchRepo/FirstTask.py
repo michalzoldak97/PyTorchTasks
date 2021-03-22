@@ -122,17 +122,20 @@ import numpy as np
 # unroll = x1.view(-1)
 #
 #
-# import pandas as pd
+import pandas as pd
 # df = pd.DataFrame([0], columns=['R'])
-# print(df)
-from PIL import Image, ImageDraw
-
-test_img = torch.rand((28, 28))
-test_img = test_img.cpu().numpy() * 255
-test_img = Image.fromarray(test_img)
-test_img = test_img.resize((280, 280), Image.LANCZOS)
-test_img = test_img.convert("RGB")
-test_draw = ImageDraw.Draw(test_img)
-test_draw.text((10, 10), str(10),  fill="#31FF2D")
-test_img.show()
-print(test_img)
+stats = pd.DataFrame(np.zeros((10, 3)), columns=['Time for epoch', 'Train accuracy', 'Test accuracy'])
+stats.iloc[2]['Train accuracy'] = 99
+print(stats.iloc[2]['Train accuracy'])
+stats.to_excel("Results\Results_Cnn1\cnn_1.xlsx")
+# from PIL import Image, ImageDraw
+#
+# test_img = torch.rand((28, 28))
+# test_img = test_img.cpu().numpy() * 255
+# test_img = Image.fromarray(test_img)
+# test_img = test_img.resize((280, 280), Image.LANCZOS)
+# test_img = test_img.convert("RGB")
+# test_draw = ImageDraw.Draw(test_img)
+# test_draw.text((10, 10), str(10),  fill="#31FF2D")
+# test_img.show()
+# print(test_img)
