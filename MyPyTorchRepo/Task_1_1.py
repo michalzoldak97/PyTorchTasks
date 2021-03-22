@@ -5,7 +5,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torchvision.datasets as datasets
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 datasets.MNIST.resources = [
             ('https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz', 'f68b3c2dcbeaaa9fbdd348bbdeb94873'),
             ('https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz', 'd53e105ee54ea40749a09fcbcd1e9432'),
@@ -74,7 +73,7 @@ print("Device: ".format(device))
 num_classes = 10
 learning_rate = 0.05
 batch_size = 64
-num_epochs = 10
+num_epochs = 40
 
 train_dataset = datasets.MNIST(root='dataset/', train=True, transform=transforms.ToTensor(), download=True)
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
@@ -82,7 +81,7 @@ train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuf
 test_dataset = datasets.MNIST(root='dataset/', train=False, transform=transforms.ToTensor(), download=True)
 test_dataloader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
-my_model = TestCNN2(1, num_classes).to(device)
+my_model = TestCNN1(1, num_classes).to(device)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(my_model.parameters(), lr=learning_rate, momentum=0.9, nesterov=True, weight_decay=0.00001)
@@ -118,6 +117,59 @@ def check_accuracy(loader, model):
         return float(num_correct) / float(num_samples)
 
 
+
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import itertools
+def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+
+def create_confusion_matrix(loader, model):
+    model.eval()
+    predictions = torch.empty([])
+    results = torch.empty([])
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device=device)
+            y = y.to(device=device)
+            scores = model(x)
+            _, tmp_predictions = scores.max(1)
+            try:
+                predictions = torch.cat((predictions, tmp_predictions))
+                results = torch.cat((results, y))
+            except:
+                predictions = tmp_predictions
+                results = y
+        cm = confusion_matrix(results.cpu(), predictions.cpu())
+        classes = list(range(num_classes))
+        plt.figure(figsize=(10, 10))
+        plot_confusion_matrix(cm, classes)
+        plt.show()
+
+
+
 def display_image(tensor_to_display, incorrect_num, correct_num):
     img = im.fromarray((tensor_to_display.cpu().numpy()*255))
     img = img.resize((560, 560), im.LANCZOS)
@@ -127,34 +179,66 @@ def display_image(tensor_to_display, incorrect_num, correct_num):
     img.show()
 
 
+def save_net_state(state, filename):
+    print("Network state saved")
+    torch.save(state, filename)
+
+
+def load_net_state(state):
+    print("Loading network")
+    state = torch.load(state)
+    my_model.load_state_dict(state['state_dict'])
+    optimizer.load_state_dict(state['optimizer'])
+
+
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         m.reset_parameters()
 
+
 #Training & evaluate
-#D:\Programming\Python\PyTorchTut\MyPyTorchRepo\Results
-rep_num = 10
-stats = pd.DataFrame(np.zeros((rep_num, 3)), columns=['Time for epoch', 'Train accuracy', 'Test accuracy'])
-for i in range(rep_num):
-    train_start_time = time.perf_counter()
-    for epoch in range(num_epochs):
-        for batch_index, (data, targets) in enumerate(train_dataloader):
-            data = data.to(device=device)
-            targets = targets.to(device=device)
-            scores = my_model(data)
-            loss = criterion(scores, targets)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        print("Loss on epoch = {}".format(loss))
-        learning_rate = learning_rate*0.99
-        for g in optimizer.param_groups:
-            g['lr'] = learning_rate
-    train_end_time = time.perf_counter()
-    stats.iloc[i]['Time for epoch'] = train_end_time - train_start_time
-    stats.iloc[i]['Train accuracy'] = check_accuracy(train_dataloader, my_model)
-    stats.iloc[i]['Test accuracy'] = check_accuracy(test_dataloader, my_model)
-    learning_rate = 0.05
-    my_model.apply(weight_reset)
-print(stats)
-stats.to_excel("Results\Results_Cnn1\cnn_2_2.xlsx")
+def train_n_times(n):
+    global learning_rate
+    stats = pd.DataFrame(np.zeros((n, 3)), columns=['Time for epoch', 'Train accuracy', 'Test accuracy'])
+    loss_stats = pd.DataFrame(np.zeros((num_epochs, 3)), columns=['Loss on epoch', 'Train accuracy', 'Test accuracy'])
+    for i in range(n):
+        train_start_time = time.perf_counter()
+        for epoch in range(num_epochs):
+            for batch_index, (data, targets) in enumerate(train_dataloader):
+                data = data.to(device=device)
+                targets = targets.to(device=device)
+                scores = my_model(data)
+                loss = criterion(scores, targets)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            print("Loss on epoch = {}".format(loss))
+            loss_stats.iloc[epoch]['Loss on epoch'] = loss
+            loss_stats.iloc[epoch]['Train accuracy'] = check_accuracy(train_dataloader, my_model)
+            loss_stats.iloc[epoch]['Test accuracy'] = check_accuracy(test_dataloader, my_model)
+            learning_rate = learning_rate*0.99
+            for g in optimizer.param_groups:
+                 g['lr'] = learning_rate
+        train_end_time = time.perf_counter()
+        stats.iloc[i]['Time for epoch'] = train_end_time - train_start_time
+        stats.iloc[i]['Train accuracy'] = check_accuracy(train_dataloader, my_model)
+        stats.iloc[i]['Test accuracy'] = check_accuracy(test_dataloader, my_model)
+        learning_rate = 0.05
+        state_to_save = {'state_dict': my_model.state_dict(), 'optimizer': optimizer.state_dict()}
+        save_net_state(state_to_save, "Results\Results_Cnn1\cnn_2_state.pth.tar")
+        print(loss_stats)
+        loss_stats.to_excel("Results\Results_Cnn1\cnn_2_loss.xlsx")
+        my_model.apply(weight_reset)
+    print(stats)
+    #stats.to_excel("Results\Results_Cnn1\cnn_2_2.xlsx")
+
+
+def load_net_to_valid():
+    load_net_state("Results\Results_Cnn1\cnn_1_state.pth.tar")
+    create_confusion_matrix(test_dataloader, my_model)
+    #check_accuracy(train_dataloader, my_model)
+    #check_accuracy(test_dataloader, my_model)
+
+#train_n_times(1)
+
+load_net_to_valid()

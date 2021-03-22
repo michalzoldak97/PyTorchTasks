@@ -121,13 +121,13 @@ import numpy as np
 # xcat_1 = torch.cat((x1,x2), dim=1)
 # unroll = x1.view(-1)
 #
-#
-import pandas as pd
-# df = pd.DataFrame([0], columns=['R'])
-stats = pd.DataFrame(np.zeros((10, 3)), columns=['Time for epoch', 'Train accuracy', 'Test accuracy'])
-stats.iloc[2]['Train accuracy'] = 99
-print(stats.iloc[2]['Train accuracy'])
-stats.to_excel("Results\Results_Cnn1\cnn_1.xlsx")
+# #
+# import pandas as pd
+# # df = pd.DataFrame([0], columns=['R'])
+# stats = pd.DataFrame(np.zeros((10, 3)), columns=['Time for epoch', 'Train accuracy', 'Test accuracy'])
+# stats.iloc[2]['Train accuracy'] = 99
+# print(stats.iloc[2]['Train accuracy'])
+# stats.to_excel("Results\Results_Cnn1\cnn_1.xlsx")
 # from PIL import Image, ImageDraw
 #
 # test_img = torch.rand((28, 28))
@@ -139,3 +139,6 @@ stats.to_excel("Results\Results_Cnn1\cnn_1.xlsx")
 # test_draw.text((10, 10), str(10),  fill="#31FF2D")
 # test_img.show()
 # print(test_img)
+
+classes = list(range(10))
+print(classes)
