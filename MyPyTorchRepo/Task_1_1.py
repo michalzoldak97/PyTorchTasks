@@ -105,11 +105,11 @@ def check_accuracy(loader, model):
             y = y.to(device=device)
             scores = model(x)
             _, predictions = scores.max(1)
-            if num_images < max_images:
-                for i in range(len(predictions)):
-                    if predictions[i] != y[i] and num_images < max_images:
-                        display_image(x[i].reshape(x[0][0].shape, -1), predictions[i].item(), y[i].item())
-                        num_images += 1
+            #if num_images < max_images:
+                # for i in range(len(predictions)):
+                #     if predictions[i] != y[i] and num_images < max_images:
+                #         display_image(x[i].reshape(x[0][0].shape, -1), predictions[i].item(), y[i].item())
+                #         num_images += 1
             num_correct += (predictions == y).sum()
             num_samples += predictions.size(0)
         print(
@@ -147,12 +147,14 @@ for i in range(rep_num):
             loss.backward()
             optimizer.step()
         print("Loss on epoch = {}".format(loss))
+        learning_rate = learning_rate*0.99
+        for g in optimizer.param_groups:
+            g['lr'] = learning_rate
     train_end_time = time.perf_counter()
     stats.iloc[i]['Time for epoch'] = train_end_time - train_start_time
     stats.iloc[i]['Train accuracy'] = check_accuracy(train_dataloader, my_model)
     stats.iloc[i]['Test accuracy'] = check_accuracy(test_dataloader, my_model)
-    for g in optimizer.param_groups:
-        g['lr'] = learning_rate*0.99
+    learning_rate = 0.05
     my_model.apply(weight_reset)
 print(stats)
-stats.to_excel("Results\Results_Cnn1\cnn_2_1.xlsx")
+stats.to_excel("Results\Results_Cnn1\cnn_2_2.xlsx")
