@@ -4,6 +4,7 @@ from  torch import nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import torchvision
 import torchvision.datasets as datasets
 datasets.MNIST.resources = [
             ('https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz', 'f68b3c2dcbeaaa9fbdd348bbdeb94873'),
@@ -17,6 +18,13 @@ from PIL import Image as im
 from PIL import ImageDraw as im_draw
 import pandas as pd
 import time
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import itertools
+
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print("Device: ".format(device))
 
 
 class TestCNN1(nn.Module):
@@ -67,25 +75,61 @@ class TestCNN2(nn.Module):
         return x
 
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print("Device: ".format(device))
-
 num_classes = 10
-learning_rate = 0.05
+learning_rate = 0.001
 batch_size = 64
-num_epochs = 40
+num_epochs = 10
+training_pretrained_model = True
 
-train_dataset = datasets.MNIST(root='dataset/', train=True, transform=transforms.ToTensor(), download=True)
-train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
 
-test_dataset = datasets.MNIST(root='dataset/', train=False, transform=transforms.ToTensor(), download=True)
-test_dataloader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
 
-my_model = TestCNN1(1, num_classes).to(device)
+    def forward(self, x):
+        return x
+
+
+if training_pretrained_model:
+    #import sys
+    my_model = torchvision.models.vgg16(pretrained=True)
+    for param in my_model.parameters():
+        param.requires_grad = False
+    my_model.avgpool = Identity()
+    my_model.features[26] = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    my_model.features[28] = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    my_model.classifier = nn.Sequential(
+        nn.Linear(512, 100), nn.ReLU(), nn.Linear(100, num_classes)
+    )
+    #print(my_model)
+    #sys.exit()
+    train_dataset = datasets.MNIST(root='dataset/', train=True, transform=transforms.Compose([
+        transforms.Resize(32),
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: x.expand(3, -1, -1))
+    ]), download=True)
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+
+    test_dataset = datasets.MNIST(root='dataset/', train=False, transform=transforms.Compose([
+        transforms.Resize(32),
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: x.expand(3, -1, -1))
+    ]), download=True)
+    test_dataloader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+else:
+
+    my_model = TestCNN2(1, num_classes).to(device)
+
+    train_dataset = datasets.MNIST(root='dataset/', train=True, transform=transforms.ToTensor(), download=True)
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+
+    test_dataset = datasets.MNIST(root='dataset/', train=False, transform=transforms.ToTensor(), download=True)
+    test_dataloader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(my_model.parameters(), lr=learning_rate, momentum=0.9, nesterov=True, weight_decay=0.00001)
 
+my_model.to(device)
 
 def check_accuracy(loader, model):
     if loader.dataset.train:
@@ -118,9 +162,6 @@ def check_accuracy(loader, model):
 
 
 
-import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
-import itertools
 def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
@@ -200,10 +241,10 @@ def weight_reset(m):
 def train_n_times(n):
     global learning_rate
     stats = pd.DataFrame(np.zeros((n, 3)), columns=['Time for epoch', 'Train accuracy', 'Test accuracy'])
-    loss_stats = pd.DataFrame(np.zeros((num_epochs, 3)), columns=['Loss on epoch', 'Train accuracy', 'Test accuracy'])
+    loss_stats = pd.DataFrame(np.zeros((num_epochs, 2)), columns=['Loss on epoch', 'Train time'])
     for i in range(n):
-        train_start_time = time.perf_counter()
         for epoch in range(num_epochs):
+            train_start_time = time.perf_counter()
             for batch_index, (data, targets) in enumerate(train_dataloader):
                 data = data.to(device=device)
                 targets = targets.to(device=device)
@@ -213,21 +254,20 @@ def train_n_times(n):
                 loss.backward()
                 optimizer.step()
             print("Loss on epoch = {}".format(loss))
+            # learning_rate = learning_rate*0.9
+            # for g in optimizer.param_groups:
+            #     g['lr'] = learning_rate
+            train_end_time = time.perf_counter()
             loss_stats.iloc[epoch]['Loss on epoch'] = loss
-            loss_stats.iloc[epoch]['Train accuracy'] = check_accuracy(train_dataloader, my_model)
-            loss_stats.iloc[epoch]['Test accuracy'] = check_accuracy(test_dataloader, my_model)
-            learning_rate = learning_rate*0.99
-            for g in optimizer.param_groups:
-                 g['lr'] = learning_rate
-        train_end_time = time.perf_counter()
+            loss_stats.iloc[epoch]['Train time'] = train_end_time - train_start_time
         stats.iloc[i]['Time for epoch'] = train_end_time - train_start_time
         stats.iloc[i]['Train accuracy'] = check_accuracy(train_dataloader, my_model)
         stats.iloc[i]['Test accuracy'] = check_accuracy(test_dataloader, my_model)
-        learning_rate = 0.05
+        #learning_rate = 0.05
         state_to_save = {'state_dict': my_model.state_dict(), 'optimizer': optimizer.state_dict()}
-        save_net_state(state_to_save, "Results\Results_Cnn1\cnn_2_state.pth.tar")
+        save_net_state(state_to_save, "Results\Results_Cnn1\cnn_4_state.pth.tar")
         print(loss_stats)
-        loss_stats.to_excel("Results\Results_Cnn1\cnn_2_loss.xlsx")
+        loss_stats.to_excel("Results\Results_Cnn1\cnn_4_loss_time.xlsx")
         my_model.apply(weight_reset)
     print(stats)
     #stats.to_excel("Results\Results_Cnn1\cnn_2_2.xlsx")
@@ -236,9 +276,9 @@ def train_n_times(n):
 def load_net_to_valid():
     load_net_state("Results\Results_Cnn1\cnn_1_state.pth.tar")
     create_confusion_matrix(test_dataloader, my_model)
-    #check_accuracy(train_dataloader, my_model)
-    #check_accuracy(test_dataloader, my_model)
 
-#train_n_times(1)
 
-load_net_to_valid()
+train_n_times(1)
+
+#load_net_to_valid()
+
